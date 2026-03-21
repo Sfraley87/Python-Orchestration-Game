@@ -1,0 +1,8 @@
+run = "python web_app.py"
+
+[deployment]
+run = ["python", "web_app.py"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80

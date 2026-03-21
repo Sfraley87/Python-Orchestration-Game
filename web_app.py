@@ -130,10 +130,10 @@ def api_stats():
 
 
 if __name__ == "__main__":
-    import argparse
+    import argparse, os
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 5000)))
     args = parser.parse_args()
     print(f"\n  Open http://{args.host}:{args.port} in your browser / phone\n")
     app.run(host=args.host, port=args.port, debug=False)
