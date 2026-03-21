@@ -1,4 +1,6 @@
 # Core — stdlib only for the base game
+flask>=3.0.0
+
 # Optional: install these for real LangChain challenges
 langchain>=0.2.0
 langchain-core>=0.2.0

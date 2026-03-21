@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Synelium Coding Game</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #1a1b26;
+      --surface: #24283b;
+      --surface2: #2f3347;
+      --border: #3b4171;
+      --accent: #7aa2f7;
+      --green: #9ece6a;
+      --red: #f7768e;
+      --yellow: #e0af68;
+      --cyan: #2ac3de;
+      --text: #c0caf5;
+      --dim: #565f89;
+      --radius: 8px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      overscroll-behavior: none;
+    }
+
+    /* ─── Layout ─── */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* ─── Header ─── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #header-title { font-weight: 700; color: var(--cyan); font-size: 15px; }
+    #timer {
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green);
+      min-width: 58px;
+      text-align: right;
+    }
+    #timer.warn { color: var(--yellow); }
+    #timer.danger { color: var(--red); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+
+    /* ─── Views ─── */
+    .view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+    .view.active { display: flex; }
+
+    /* ─── Play view ─── */
+    #challenge-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    .cat-api       { background: #1a3a6e; color: #7aa2f7; }
+    .cat-automation{ background: #3a2e00; color: #e0af68; }
+    .cat-async     { background: #2e1a3e; color: #bb9af7; }
+    .cat-langchain { background: #002e3a; color: #2ac3de; }
+    .diff-easy     { background: #1a3a1a; color: #9ece6a; }
+    .diff-medium   { background: #3a2e00; color: #e0af68; }
+    .diff-hard     { background: #3a1a1a; color: #f7768e; }
+    #challenge-id  { color: var(--dim); font-size: 12px; margin-left: auto; }
+
+    /* ─── Scrollable content pane ─── */
+    #content-pane {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    #challenge-desc {
+      padding: 12px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-size: 13.5px;
+    }
+
+    #challenge-context {
+      padding: 8px 14px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      color: var(--dim);
+      font-size: 12.5px;
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+    #challenge-context:empty { display: none; }
+
+    /* ─── Editor ─── */
+    #editor-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 200px;
+    }
+    #editor-label {
+      padding: 6px 14px;
+      font-size: 11px;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .CodeMirror {
+      flex: 1;
+      height: 100% !important;
+      min-height: 220px;
+      font-size: 13px;
+      font-family: 'Courier New', Consolas, monospace;
+      background: var(--bg) !important;
+    }
+    .CodeMirror-scroll { min-height: 220px; }
+
+    /* ─── Results ─── */
+    #results-section { display: none; padding: 12px 14px; }
+    #results-section.show { display: block; }
+
+    #results-summary {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .result-item {
+      padding: 7px 10px;
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      font-size: 13px;
+      background: var(--surface);
+      border-left: 3px solid var(--border);
+    }
+    .result-item.pass { border-left-color: var(--green); }
+    .result-item.fail { border-left-color: var(--red); }
+    .result-icon { margin-right: 6px; }
+    .result-detail { color: var(--dim); font-size: 12px; margin-top: 3px; font-family: monospace; }
+    .result-error  { color: var(--red);  font-size: 12px; margin-top: 3px; font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+
+    #score-line {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      font-weight: 600;
+    }
+    #score-val { font-size: 18px; }
+    .score-good  { color: var(--green); }
+    .score-ok    { color: var(--yellow); }
+    .score-bad   { color: var(--red); }
+
+    /* ─── Hint ─── */
+    #hint-box {
+      display: none;
+      margin: 0 14px 8px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border-left: 3px solid var(--yellow);
+      border-radius: var(--radius);
+      font-size: 13px;
+      color: var(--yellow);
+      line-height: 1.5;
+    }
+    #hint-box.show { display: block; }
+
+    /* ─── Solution ─── */
+    #solution-box {
+      display: none;
+      margin: 0 14px 8px;
+      padding: 10px 12px;
+      background: var(--surface2);
+      border-left: 3px solid var(--cyan);
+      border-radius: var(--radius);
+      font-size: 12.5px;
+      color: var(--dim);
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    #solution-box.show { display: block; }
+    #solution-toggle {
+      display: none;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--dim);
+      border-radius: var(--radius);
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      margin: 0 14px 8px;
+    }
+    #solution-toggle.show { display: block; }
+
+    /* ─── Action bar ─── */
+    #action-bar {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    button {
+      border: none;
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    button:active { opacity: .7; }
+    button:disabled { opacity: .35; cursor: default; }
+
+    #btn-run   { background: var(--accent); color: #1a1b26; flex: 1; min-width: 100px; }
+    #btn-hint  { background: var(--surface2); color: var(--yellow); border: 1px solid var(--border); }
+    #btn-skip  { background: var(--surface2); color: var(--dim);    border: 1px solid var(--border); }
+    #btn-next  { background: var(--green);    color: #1a1b26; display: none; flex: 1; }
+    #btn-stats { background: var(--surface2); color: var(--cyan);   border: 1px solid var(--border); font-size: 18px; padding: 8px 12px; }
+
+    /* ─── Stats view ─── */
+    #stats-view {
+      padding: 16px 14px;
+      gap: 12px;
+    }
+    #stats-view h2 { color: var(--cyan); margin-bottom: 4px; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-val { font-weight: 700; color: var(--yellow); }
+    .stat-section { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing:.5px; margin-top: 12px; }
+    .cat-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--border);
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .cat-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .4s; }
+    #btn-back-play { background: var(--surface2); color: var(--accent); border: 1px solid var(--border); }
+
+    /* ─── Loading ─── */
+    #loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: var(--dim);
+      font-size: 15px;
+      gap: 10px;
+    }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Toast ─── */
+    #toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 9px 18px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      transition: all .25s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ─── Category filter bar ─── */
+    #filter-bar {
+      display: flex;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+      -webkit-overflow-scrolling: touch;
+    }
+    #filter-bar::-webkit-scrollbar { display: none; }
+    .filter-btn {
+      padding: 5px 12px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--surface2);
+      color: var(--dim);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .filter-btn.active { background: var(--accent); color: #1a1b26; border-color: var(--accent); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <div id="header">
+    <div id="header-title">⚡ Synelium</div>
+    <div id="timer">15:00</div>
+  </div>
+
+  <!-- Play View -->
+  <div id="play-view" class="view active">
+
+    <!-- Filter bar -->
+    <div id="filter-bar">
+      <button class="filter-btn active" data-cat="random">Random</button>
+      <button class="filter-btn" data-cat="api">API</button>
+      <button class="filter-btn" data-cat="automation">Automation</button>
+      <button class="filter-btn" data-cat="async">Async</button>
+      <button class="filter-btn" data-cat="langchain">LangChain</button>
+    </div>
+
+    <!-- Challenge meta -->
+    <div id="challenge-meta">
+      <span id="badge-cat" class="badge"></span>
+      <span id="badge-diff" class="badge"></span>
+      <span id="challenge-id"></span>
+    </div>
+
+    <div id="content-pane">
+      <!-- Loading state -->
+      <div id="loading"><div class="spinner"></div> Loading challenge…</div>
+
+      <!-- Challenge description -->
+      <div id="challenge-desc" style="display:none"></div>
+      <div id="challenge-context" style="display:none"></div>
+
+      <!-- Hint -->
+      <div id="hint-box"></div>
+
+      <!-- Editor -->
+      <div id="editor-section" style="display:none">
+        <div id="editor-label">Your solution</div>
+        <textarea id="editor"></textarea>
+      </div>
+
+      <!-- Results -->
+      <div id="results-section">
+        <div id="results-summary"></div>
+        <div id="results-list"></div>
+        <div id="score-line">
+          <span id="score-val"></span>
+          <span id="xp-val"></span>
+          <span id="streak-val"></span>
+        </div>
+      </div>
+
+      <!-- Solution -->
+      <button id="solution-toggle" onclick="toggleSolution()">Show solution</button>
+      <div id="solution-box"></div>
+    </div>
+
+    <!-- Action bar -->
+    <div id="action-bar">
+      <button id="btn-run"   onclick="runTests()">▶ Run Tests</button>
+      <button id="btn-hint"  onclick="getHint()">💡</button>
+      <button id="btn-skip"  onclick="skipChallenge()">Skip</button>
+      <button id="btn-next"  onclick="nextChallenge()">Next →</button>
+      <button id="btn-stats" onclick="showStats()">📊</button>
+    </div>
+  </div>
+
+  <!-- Stats View -->
+  <div id="stats-view" class="view">
+    <h2>Your Progress</h2>
+    <div id="stats-content"><div class="spinner"></div></div>
+    <div id="action-bar" style="padding:10px 0 0">
+      <button id="btn-back-play" onclick="showPlay()">← Back to game</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  challenge: null,
+  hintIndex: 0,
+  sessionStart: null,
+  sessionStats: { attempted: 0, passed: 0, xp: 0 },
+  timerInterval: null,
+  challengeStart: null,
+  category: 'random',
+  solution: null,
+};
+const SESSION_SECS = 15 * 60;
+
+// ─── CodeMirror ────────────────────────────────────────────────────────────────
+const cm = CodeMirror.fromTextArea(document.getElementById('editor'), {
+  mode: 'python',
+  theme: 'dracula',
+  lineNumbers: true,
+  indentUnit: 4,
+  tabSize: 4,
+  indentWithTabs: false,
+  lineWrapping: true,
+  autofocus: false,
+  extraKeys: { Tab: cm => cm.execCommand('indentMore') },
+});
+
+// ─── Init ──────────────────────────────────────────────────────────────────────
+(async function init() {
+  await fetch('/api/session/start', { method: 'POST' });
+  state.sessionStart = Date.now();
+  startTimer();
+  await loadChallenge();
+})();
+
+// ─── Timer ─────────────────────────────────────────────────────────────────────
+function startTimer() {
+  state.timerInterval = setInterval(() => {
+    const elapsed = (Date.now() - state.sessionStart) / 1000;
+    const remaining = Math.max(0, SESSION_SECS - elapsed);
+    updateTimerDisplay(remaining);
+    if (remaining <= 0) {
+      clearInterval(state.timerInterval);
+      endSession();
+      toast('⏰ Time\'s up! Session complete.');
+    }
+  }, 1000);
+}
+
+function updateTimerDisplay(secs) {
+  const el = document.getElementById('timer');
+  const m = Math.floor(secs / 60).toString().padStart(2, '0');
+  const s = Math.floor(secs % 60).toString().padStart(2, '0');
+  el.textContent = `${m}:${s}`;
+  el.className = secs <= 60 ? 'danger' : secs <= 300 ? 'warn' : '';
+}
+
+// ─── Challenge loading ─────────────────────────────────────────────────────────
+async function loadChallenge() {
+  showLoading(true);
+  hideResults();
+
+  const url = `/api/challenge?category=${state.category}`;
+  const res = await fetch(url);
+  if (!res.ok) { toast('No challenges found for this filter.'); showLoading(false); return; }
+
+  state.challenge = await res.json();
+  state.hintIndex = 0;
+  state.challengeStart = Date.now();
+  state.solution = null;
+
+  renderChallenge(state.challenge);
+  showLoading(false);
+
+  document.getElementById('btn-run').style.display = '';
+  document.getElementById('btn-skip').style.display = '';
+  document.getElementById('btn-next').style.display = 'none';
+  document.getElementById('hint-box').className = '';
+  document.getElementById('hint-box').textContent = '';
+  document.getElementById('solution-toggle').className = '';
+  document.getElementById('solution-box').className = '';
+}
+
+function renderChallenge(c) {
+  // Meta badges
+  const catEl = document.getElementById('badge-cat');
+  catEl.textContent = c.category.toUpperCase();
+  catEl.className = `badge cat-${c.category}`;
+
+  const diffEl = document.getElementById('badge-diff');
+  const stars = { easy: '★☆☆', medium: '★★☆', hard: '★★★' };
+  diffEl.textContent = `${stars[c.difficulty] || ''} ${c.difficulty}`;
+  diffEl.className = `badge diff-${c.difficulty}`;
+
+  document.getElementById('challenge-id').textContent = c.id;
+
+  // Description
+  const descEl = document.getElementById('challenge-desc');
+  descEl.textContent = `${c.title}\n\n${c.description}`;
+  descEl.style.display = '';
+
+  // Context
+  const ctxEl = document.getElementById('challenge-context');
+  if (c.context) {
+    ctxEl.textContent = c.context;
+    ctxEl.style.display = '';
+  } else {
+    ctxEl.style.display = 'none';
+  }
+
+  // Editor
+  cm.setValue(c.starter_code || '');
+  cm.clearHistory();
+  document.getElementById('editor-section').style.display = '';
+  setTimeout(() => cm.refresh(), 100);
+}
+
+// ─── Run tests ─────────────────────────────────────────────────────────────────
+async function runTests() {
+  if (!state.challenge) return;
+  document.getElementById('btn-run').disabled = true;
+
+  const elapsed = (Date.now() - state.challengeStart) / 1000;
+  const res = await fetch('/api/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      challenge_id: state.challenge.id,
+      code: cm.getValue(),
+      elapsed,
+    }),
+  });
+  document.getElementById('btn-run').disabled = false;
+
+  if (!res.ok) { toast('Server error'); return; }
+  const data = await res.json();
+
+  renderResults(data);
+
+  state.sessionStats.attempted += 1;
+  state.sessionStats.xp += data.xp;
+  if (data.passed === data.total) state.sessionStats.passed += 1;
+
+  if (data.solution) {
+    state.solution = data.solution;
+    document.getElementById('solution-toggle').className = 'show';
+  }
+
+  document.getElementById('btn-run').style.display = 'none';
+  document.getElementById('btn-skip').style.display = 'none';
+  document.getElementById('btn-next').style.display = '';
+}
+
+function renderResults(data) {
+  const section = document.getElementById('results-section');
+  section.className = 'show';
+
+  const passColor = data.passed === data.total ? 'var(--green)' : data.passed > 0 ? 'var(--yellow)' : 'var(--red)';
+  document.getElementById('results-summary').innerHTML =
+    `<span style="color:${passColor}">Tests: ${data.passed}/${data.total} passed</span>`;
+
+  const list = document.getElementById('results-list');
+  list.innerHTML = data.results.map(r => {
+    const cls = r.passed ? 'pass' : 'fail';
+    const icon = r.passed ? '✓' : '✗';
+    let detail = '';
+    if (!r.passed) {
+      if (r.expected != null) detail += `<div class="result-detail">Expected: ${esc(r.expected)}</div>`;
+      if (r.got != null)      detail += `<div class="result-detail">Got: ${esc(r.got)}</div>`;
+      if (r.error)            detail += `<div class="result-error">${esc(r.error)}</div>`;
+    }
+    return `<div class="result-item ${cls}"><span class="result-icon" style="color:${r.passed ? 'var(--green)' : 'var(--red)'}">${icon}</span>${esc(r.description)}${detail}</div>`;
+  }).join('');
+
+  const score = data.score;
+  const scoreClass = score >= 80 ? 'score-good' : score >= 50 ? 'score-ok' : 'score-bad';
+  document.getElementById('score-val').innerHTML = `<span class="${scoreClass}">${score}/100</span>`;
+  document.getElementById('xp-val').innerHTML = `<span style="color:var(--yellow)">+${data.xp} XP</span>`;
+  const streak = data.streak || 1;
+  document.getElementById('streak-val').textContent = `${streak > 1 ? '🔥 ' : ''}${streak} day streak`;
+}
+
+function hideResults() {
+  document.getElementById('results-section').className = '';
+}
+
+// ─── Hint ──────────────────────────────────────────────────────────────────────
+async function getHint() {
+  if (!state.challenge) return;
+  const res = await fetch(`/api/hint/${state.challenge.id}/${state.hintIndex}`);
+  const data = await res.json();
+
+  const box = document.getElementById('hint-box');
+  if (data.hint) {
+    box.textContent = `💡 Hint ${data.index + 1}/${data.total}: ${data.hint}`;
+    box.className = 'show';
+    state.hintIndex += 1;
+  } else {
+    toast('No hints available for this challenge.');
+  }
+}
+
+// ─── Skip / Next ───────────────────────────────────────────────────────────────
+async function skipChallenge() {
+  toast('Skipping…');
+  await loadChallenge();
+}
+
+async function nextChallenge() {
+  await loadChallenge();
+}
+
+// ─── Solution toggle ───────────────────────────────────────────────────────────
+function toggleSolution() {
+  const box = document.getElementById('solution-box');
+  const btn = document.getElementById('solution-toggle');
+  if (box.className === 'show') {
+    box.className = '';
+    btn.textContent = 'Show solution';
+  } else {
+    box.textContent = state.solution || '';
+    box.className = 'show';
+    btn.textContent = 'Hide solution';
+  }
+}
+
+// ─── Stats ─────────────────────────────────────────────────────────────────────
+async function showStats() {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('stats-view').classList.add('active');
+
+  const res = await fetch('/api/stats');
+  const s = await res.json();
+
+  const streak = s.streak > 1 ? `🔥 ${s.streak}` : s.streak;
+  let html = `
+    <div class="stat-row"><span>Total XP</span><span class="stat-val">${s.total_xp}</span></div>
+    <div class="stat-row"><span>Challenges completed</span><span class="stat-val">${s.completed}</span></div>
+    <div class="stat-row"><span>Sessions played</span><span class="stat-val">${s.sessions}</span></div>
+    <div class="stat-row"><span>Current streak</span><span class="stat-val">${streak} day${s.streak !== 1 ? 's' : ''}</span></div>
+    <div class="stat-section">By Category</div>
+  `;
+  for (const [cat, d] of Object.entries(s.by_category)) {
+    const pct = d.total > 0 ? Math.round((d.completed / d.total) * 100) : 0;
+    html += `<div class="stat-row"><span>${cat}</span><span class="stat-val">${d.completed}/${d.total}</span></div>
+      <div class="cat-bar"><div class="cat-bar-fill" style="width:${pct}%"></div></div>`;
+  }
+  html += `<div class="stat-section">By Difficulty</div>`;
+  for (const [diff, d] of Object.entries(s.by_difficulty)) {
+    html += `<div class="stat-row"><span>${diff}</span><span class="stat-val">${d.completed}/${d.total}</span></div>`;
+  }
+
+  document.getElementById('stats-content').innerHTML = html;
+}
+
+function showPlay() {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('play-view').classList.add('active');
+}
+
+// ─── Session end ───────────────────────────────────────────────────────────────
+async function endSession() {
+  const duration = Math.round((Date.now() - state.sessionStart) / 1000);
+  await fetch('/api/session/end', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...state.sessionStats, duration }),
+  });
+}
+
+window.addEventListener('beforeunload', endSession);
+
+// ─── Filters ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.category = btn.dataset.cat;
+    await loadChallenge();
+  });
+});
+
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+function showLoading(on) {
+  document.getElementById('loading').style.display = on ? '' : 'none';
+  if (on) {
+    document.getElementById('challenge-desc').style.display = 'none';
+    document.getElementById('challenge-context').style.display = 'none';
+    document.getElementById('editor-section').style.display = 'none';
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
