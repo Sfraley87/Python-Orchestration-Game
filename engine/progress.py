@@ -5,7 +5,12 @@ import os
 from datetime import datetime, date
 from pathlib import Path
 
-PROGRESS_FILE = Path(__file__).parent.parent / "data" / "progress.json"
+# On Railway, use the mounted volume at /data for persistence.
+# Locally, store in the repo's data/ directory.
+if os.environ.get("RAILWAY_ENVIRONMENT"):
+    PROGRESS_FILE = Path("/data/progress.json")
+else:
+    PROGRESS_FILE = Path(__file__).parent.parent / "data" / "progress.json"
 
 
 class Progress:
